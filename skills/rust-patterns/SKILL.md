@@ -18,12 +18,14 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 |---------|-----|-----|
 | Running cargo commands | Read `.cargo/config.toml` for aliases | Projects often define custom aliases for common workflows |
 | CI pipeline | `fmt --check` → `clippy -D warnings` → `nextest run` → `doc` | Standard pre-commit checks in order |
+| Bypassing clippy lint | `#[expect(lint, reason = "...")]` or comment above `#[allow(...)]` | Documents why the lint doesn't apply; reviewable justification |
 | Running tests | Check for `.config/nextest.toml`; use `cargo nextest run` if present | Faster parallel execution than `cargo test` |
 
 ## Error Handling
 
 | Instead of | Use | Why |
 |------------|-----|-----|
+| `.unwrap()` | `.expect("reason")` or `?` with context | Panics hide bugs; expect documents assumptions; `?` propagates properly |
 | Single error message | `MessagePair { external, internal }` | Prevents leaking sensitive info to clients; keeps detail for logs |
 | Library errors as strings | `thiserror` enums for domain errors | Pattern matching for retry logic, client feedback |
 | Bare `?` propagation | `.context()` / `.with_context(|| format!(...))` | Adds high-level context to low-level errors |
@@ -35,6 +37,7 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 
 | Pattern | Example | Gotcha |
 |---------|---------|--------|
+| Explicit runtime ownership | Pass `Handle` explicitly; `#[tokio::main]` only at entry point | Don't assume runtime exists; don't spawn from arbitrary code |
 | Select-based event loop | `select!` returns typed `Action` enum; `loop { apply(select().await) }` | Keep select branches thin; complex logic inside can be cancelled |
 | Prevent futurelock | Use channels or `tokio::spawn` for lock-holding futures in `select!` | `select!` stops polling losers; stopped future holding lock = deadlock |
 | Channel selection | `mpsc` bounded (backpressure), `oneshot` (request-reply), `watch` (broadcast latest) | Avoid unbounded `mpsc` except sync-to-async bridge |
@@ -56,6 +59,7 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 
 | Guideline | Example | Why |
 |-----------|---------|-----|
+| Dependency abstraction | `trait Clock`, `trait Network` with real + sim impls | Swap behavior for deterministic tests; enables simulation without mocks |
 | Type witness traits | `trait SagaType { type Ctx; type Params; }` instead of `<Ctx, Params, Output, Error>` | Bundle related types via associated types; avoids parameter explosion |
 | Consistent API derives | `#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]` | Predictable capabilities for API types |
 | Adjacent enum tagging | `#[serde(tag = "type", content = "value")]` or `#[serde(tag = "type")]` | Clear JSON: `{"type": "V4", "value": {...}}` vs flat `{"type": "Create", "name": "foo"}` |
