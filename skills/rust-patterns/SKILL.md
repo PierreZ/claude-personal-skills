@@ -14,8 +14,8 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 
 ## Tooling
 
-| Before | Do | Why |
-|--------|-----|-----|
+| Context | Do | Why |
+|---------|-----|-----|
 | Running cargo commands | Read `.cargo/config.toml` for aliases | Projects often define custom aliases for common workflows |
 | CI pipeline | `fmt --check` → `clippy -D warnings` → `nextest run` → `doc` | Standard pre-commit checks in order |
 | Running tests | Check for `.config/nextest.toml`; use `cargo nextest run` if present | Faster parallel execution than `cargo test` |
@@ -25,9 +25,11 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 | Instead of | Use | Why |
 |------------|-----|-----|
 | Single error message | `MessagePair { external, internal }` | Prevents leaking sensitive info to clients; keeps detail for logs |
-| `anyhow::Error` everywhere | Domain-specific enums with `thiserror` | Enables pattern matching for retry logic, client feedback |
+| Library errors as strings | `thiserror` enums for domain errors | Pattern matching for retry logic, client feedback |
+| Bare `?` propagation | `.context()` / `.with_context(|| format!(...))` | Adds high-level context to low-level errors |
 | `Result<T, Error>` everywhere | Type aliases like `CreateResult<T>`, `DeleteResult` | Self-documenting API signatures |
-| Error classification | `BackoffError::Transient(e)` vs `Permanent(e)` | Enables smart retry: transient = backoff, permanent = fail fast |
+| Retrying all errors uniformly | Classify: `BackoffError::Transient(e)` vs `Permanent(e)` | Transient = backoff retry, permanent = fail fast |
+| Monolithic error enum | Nested `Result<Result<T, LocalErr>, FatalErr>` | Separates recoverable failures from system-halting errors |
 
 ## Async & Tokio
 
@@ -36,11 +38,6 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 | Select-based event loop | `select!` returns typed `Action` enum; `loop { apply(select().await) }` | Keep select branches thin; complex logic inside can be cancelled |
 | Prevent futurelock | Use channels or `tokio::spawn` for lock-holding futures in `select!` | `select!` stops polling losers; stopped future holding lock = deadlock |
 | Channel selection | `mpsc` bounded (backpressure), `oneshot` (request-reply), `watch` (broadcast latest) | Avoid unbounded `mpsc` except sync-to-async bridge |
-
-## Iterators & Closures
-
-| Pattern | Example | When |
-|---------|---------|------|
 
 ## Type Safety
 
@@ -51,7 +48,8 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 | Enum state machines | Flat struct with `Option` fields | Enum variants with embedded state-specific data | Invalid states unrepresentable; each state knows its data |
 | Validated transitions | `set_state(new)` with no checks | `assert!(valid_transition(old, new))` | Fail fast on invalid transitions; bugs don't propagate |
 | `Cow` for flexibility | `String` or `&'static str` separately | `Cow<'static, str>` | Accepts both static and owned; avoids allocation for constants |
-| Arc vs Box | `Arc<T>` for Clone+Send shared ownership; `Box<dyn Trait>` for single-owner dynamic dispatch | Stack if known type, `Box` if single owner + dyn, `Arc` if shared |
+| `Arc` for sharing | `Rc` or cloning data | `Arc<T>` | Clone+Send shared ownership across threads |
+| `Box` for dyn | Stack allocation of trait objects | `Box<dyn Trait>` | Single-owner dynamic dispatch; heap when size unknown |
 | `Arc::clone` | `arc.clone()` | `Arc::clone(&arc)` | Makes intent explicit: cheap ref count bump, not deep clone |
 
 ## Trait Design
@@ -72,6 +70,7 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 | OpContext/RequestContext | Bundle `log`, `authn`, `authz` into single context with `authorize()`, `child()` | Consistent logging, auth, tracing; avoids parameter explosion |
 | Simulated implementations | Full alternative impls (e.g., `sp-sim/`) instead of mock frameworks | Exercises real code paths; catches integration bugs mocks miss |
 | `#[instrument]` macro | Add `#[tracing::instrument]` to functions when using tracing | Automatic span creation with function args; simplifies observability |
+| Sans-IO | Logic accepts/returns bytes; caller handles I/O | Testable, framework-agnostic; see [sans-io.readthedocs.io](https://sans-io.readthedocs.io) |
 
 ## Database Patterns
 
@@ -87,21 +86,8 @@ Practical patterns and pitfalls for writing idiomatic, testable Rust.
 | Workspace by change frequency | Separate crates for stable (types, utils) vs volatile (app logic) code | Incremental builds; stable crates rarely recompile |
 | Re-export from crate root | `pub use error::HttpError;` in lib.rs | Users write `use crate::HttpError` not `use crate::error::HttpError` |
 
-## Dependencies
-
-| Avoid | Prefer | Reason |
-|-------|--------|--------|
-
 ## Unsafe Code
 
 | Rule | Example | Why |
 |------|---------|-----|
 | SAFETY comments | `// SAFETY: pointer is valid because...` before every `unsafe` block | Documents invariants; required by clippy `undocumented_unsafe_blocks` |
-
-## Common Pitfalls
-
--
-
-## Full Reference
-
-<!-- Link to blog post if you have one -->
